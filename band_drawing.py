@@ -1,81 +1,218 @@
+# This program calculate the chern number of a 2D system using
+# technique that was introduced in paper by T. Fukui et. al.
+
+# Author: Amin Ahmadi
+# Date(in): Oct 30, 2017
+# Date2: Nov 6, 2017
+# This version would be more structured
+############################################################
+# importing numpy and linear algebra modules
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.cm as cm
-import sys
-sys.path.append(r'C:\Users\EFE\OneDrive\Masaüstü\PHYS400_Chern\chern-master')  # Adjust the path as necessary
-import chern
+import numpy.linalg as lg
 
-
-
-# Define function of Harper matrix 
-def H(p, q, kx, ky):
-    
+########################################
+###            Functions             ###
+########################################
+def H_k(k_vec, p=1, q=3):
+    kx=k_vec[0]
+    ky=k_vec[1]
     # Initialize the matrix
     M = np.zeros((q, q), dtype=complex)
 
     # Fill in the matrix
     for i in range(q):
         # Main diagonal
-        M[i, i] =  2 * np.cos(ky +2*np.pi*(p/q) * i)
+        M[i, i] =  2 * np.cos(ky +2*np.pi*(p/q) * (i+1))
     # Upper diagonal
         if i + 1 < q:
-            M[i, i + 1] = np.exp(+kx*i*1j)
+            M[i, i + 1] = np.exp(+q*kx*1j)
     # Lower diagonal
         if i - 1 >= 0:
-            M[i, i - 1] = np.exp(-kx*i*1j)
+            M[i, i - 1] = np.exp(-q*kx*1j)
 
-    M[0,q-1]= np.exp(-1j*ky)
-    M[q-1,0]= np.exp(1j*ky)  
+    M[0,q-1]= np.exp(-1j*kx*q)
+    M[q-1,0]= np.exp(1j*kx*q)  
 
     if q==2:
-        M[0,1]=np.exp(+kx*i*1j)+np.exp(-kx*i*1j) 
-        M[1,0]=np.exp(+kx*i*1j)+np.exp(-kx*i*1j)    
+        M[0,1]=np.exp(+kx*1j)+np.exp(-kx*1j) 
+        M[1,0]=np.exp(+kx*1j)+np.exp(-kx*1j)  
+    #M=M+M.conj().T      
     return M
 
-Q=2
-p=1
-
-
-
-ev=np.linalg.eig(H(p,2,4*np.pi/3,4*np.pi/3))[1]
-
-for q in range(1,Q+1):
-    xline=np.linspace(-4*np.pi/3,4*np.pi/3)
-    yline=np.linspace(-4*np.pi/3,4*np.pi/3)
-    X, Y = np.meshgrid(xline, yline)
-    Z = np.zeros(X.shape + (q,))
-
-    # Populate Z with eigenvalues for each (kx, ky) pair
-    for i in range(len(xline)):
-        for j in range(len(yline)):
-            eigenvals = np.linalg.eigvalsh(H(p, q, X[i, j], Y[i, j]))
-            for k in range(q):
-                Z[i, j, k] = eigenvals[k]
-
-    #x1 = np.linalg.eigvalsh(H(1,3,xline, yline))
-    #x2= np.linalg.eigvalsh(H(1,3,kx=2*np.pi/3, ky=2*np.pi/3))
-    #Z=np.transpose(Z)
-
-    # Combined surface plot for all eigenvalue levels, with custom colors
-    fig = plt.figure(figsize=(12, 8))
-    ax = fig.add_subplot(111, projection='3d')
-
-    colors = ['coolwarm', 'viridis', 'plasma','inferno', 'magma', 'cividis']  # Custom colors for each eigenvalue level
-
-    for k in range(np.shape(Z)[-1]):
-        surf = ax.plot_surface(X, Y, Z[:, :, k], cmap=colors[k], edgecolor='none', linewidth=0, antialiased=True, alpha=0.7)
-
-    ax.set_xlabel('kx')
-    ax.set_ylabel('ky')
-    ax.set_zlabel('Eigenvalue')
-    ax.set_title('Combined Eigenvalues of Harper\'s Equation')
-
-    # Adding a legend is tricky for 3D surface plots, so we'll use a custom approach
-    from matplotlib.lines import Line2D
-    legend_elements = [Line2D([0], [0], marker='o', color='w', label=f'Eigenvalue Level {k+1}',
-                            markerfacecolor=cm.get_cmap(colors[k])(0.5), markersize=10) for k in range(np.shape(Z)[-1])]
-    ax.legend(handles=legend_elements, loc='upper right')
-
-    plt.tight_layout()
-    plt.show()
+def build_U(vec1,vec2):
+    """function to calculate the iner product of two
+    eigenvectors divided by the norm:
     
+    U = <psi|psi+mu>/|<psi|psi+mu>|
+
+    input:
+    ------
+    vec, vec2: vectors complex.
+
+    return:
+    -------
+    U: scalar complex number
+
+    """
+
+    # U = <psi|psi+mu>/|<psi|psi+mu>|
+    in_product = np.dot(vec1,vec2.conj())
+
+    U = in_product / np.abs(in_product)
+
+    return U
+############################################################
+
+def latF(k_vec, Dk, dim):
+    """calulate lattice field using the definition: F12 = ln[
+    U1 * U2(k+1) * U1(k_2)^-1 * U2(k)^-1 ] for each
+    k=(kx,ky) point, four U must be calculated.  The lattice
+    field has the same dimension of the number of energy
+    bands.
+    
+    input:
+    ------
+    k_vec:vec(2), float, (kx,ky).
+    Dk: vec(2), float, (Dkx,Dky),
+    dim:integer,  dim of H(k)
+    
+    return:
+    -------
+    F12:vec(dim), complex, lattice field corresponding to each band.
+    E_sort: vec(dim) float, eigenenergies.
+    """
+
+    # Here we calculate the band structure and sort
+    # them from low to high eigenenergies
+
+    k = k_vec
+    E, aux = lg.eig( H_k(k) )
+    idx = E.argsort()
+    E_sort = E[idx]
+    psi = aux[:,idx]
+
+    k = np.array([k_vec[0]+Dk[0], k_vec[1]], float)
+    E, aux = lg.eig( H_k(k) )
+    idx = E.argsort()
+    psiDx = aux[:,idx]
+
+    k = np.array([k_vec[0], k_vec[1]+Dk[1]], float)
+    E, aux = lg.eig( H_k(k) )
+    idx = E.argsort()
+    psiDy = aux[:,idx]
+
+    k = np.array([k_vec[0]+Dk[0], k_vec[1]+Dk[1]], float)
+    E, aux = lg.eig( H_k(k) )
+    idx = E.argsort()
+    psiDxDy = aux[:,idx]
+
+    U1x = np.zeros((dim), dtype=complex)
+    U2y = np.zeros((dim), dtype=complex)
+    U1y = np.zeros((dim), dtype=complex)
+    U2x = np.zeros((dim), dtype=complex)
+
+    for i in range(dim):
+        U1x[i] = build_U(psi[:,i], psiDx[:,i] )
+        U2y[i] = build_U(psi[:,i], psiDy[:,i] )
+        U1y[i] = build_U(psiDy[:,i], psiDxDy[:,i] )
+        U2x[i] = build_U(psiDx[:,i], psiDxDy[:,i] )
+
+    F12 = np.zeros((dim), dtype=complex)
+
+    F12 = np.log( U1x * U2x * 1./U1y * 1./U2y)
+
+    return F12, E_sort
+
+##################################################
+###             Main program                   ###
+##################################################
+
+x_res = 50
+y_res = 50
+q = 3
+Nd = q                          # dimension of the Hamiltonian
+
+Dx = (2.*np.pi/3.)/x_res
+Dy = (2.*np.pi)/y_res
+Dk = np.array([Dx,Dy], float)
+
+LF = np.zeros((Nd), dtype=complex)
+LF_arr = np.zeros((Nd,x_res, y_res), dtype=float) # plotting array
+sumN = np.zeros((Nd), dtype=complex)
+E_k = np.zeros((Nd), dtype=complex)
+chernN = np.zeros((Nd), dtype=complex)
+
+for ix in range(x_res):
+
+    kx = ix*Dx
+    for iy in range(y_res):
+
+        ky = iy*Dy
+
+        k_vec = np.array([kx,ky], float)
+        LF, E_k = latF(k_vec, Dk, Nd)
+
+        sumN += LF
+
+        # save data for plotting
+        LF_arr[:,ix,iy] = -LF.imag/(2.*np.pi) 
+
+chernN = sumN.imag/(2.*np.pi)
+print("Chern number associated with each band: ", chernN)
+
+##################################################
+###             Main program                   ###
+##################################################
+
+import matplotlib.pyplot as pl
+from mpl_toolkits.mplot3d import Axes3D
+from matplotlib import cm
+
+fig = pl.figure()
+ax = fig.add_subplot(111,projection='3d')
+
+kx = np.linspace(0,2.*np.pi/3., x_res)
+ky = np.linspace(0,2.*np.pi, y_res)
+
+kx, ky = np.meshgrid(ky,kx)
+
+surf = ax.plot_wireframe(ky, kx, LF_arr[1,:,:], rstride=1, cstride=1, color='0.4')
+# ax.set_xlim(0,2.*np.pi/3.)
+
+# Set viewpoint.
+ax.azim = -60
+ax.elev = 30
+
+# Label axes.
+ax.set_xlabel(r'$k_x$', fontsize=18)
+ax.set_xticks([0.0, np.pi/3, 2*np.pi/3])
+ax.set_xticklabels([r'$0$', r'$\pi/3$', r'$2\pi/3$'], fontsize=16)
+ax.set_xlim(0,2*np.pi/3)
+
+ax.set_ylabel(r'$k_y$', fontsize=18)
+ax.yaxis._axinfo['label']['space_factor'] = 2.5
+ax.set_yticks([0.0, np.pi, 2*np.pi])
+ax.set_yticklabels([r'$0$', r'$\pi$', r'$2\pi$'], fontsize=16)
+ax.set_ylim(0,2*np.pi)
+
+
+ax.set_zlabel(r'$i\tilde{F}_{12}$', fontsize=18)
+ax.zaxis._axinfo['label']['space_factor'] = 2.5
+
+# ax.set_zticks([""])
+
+# ax.set_zticklabels([""])
+
+
+# surf = ax.plot_surface(ky, kx, LF_arr[1,:,:], rstride=1, cstride=1, color='g', norm=0.1, shade=True,
+#                           facecolor='b', linewidth=0, antialiased=False) #cmap=cm.jet
+
+# To rescale the plot
+ax.get_proj = lambda: np.dot(Axes3D.get_proj(ax), np.diag([0.5, 1.5, 1, 1]))
+
+# ax.auto_scale_xyz([0, 500], [0, 500], [0, 0.15])
+# ax.pbaspect = [.6, 2.6, 0.25]
+# fig.colorbar(surf, shrink=1., aspect=5)
+
+pl.show()
+# fig.savefig("chr3.pdf", bbox_inches='tight')
