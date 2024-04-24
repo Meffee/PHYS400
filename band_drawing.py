@@ -1,19 +1,10 @@
-# This program calculate the chern number of a 2D system using
-# technique that was introduced in paper by T. Fukui et. al.
-
-# Author: Amin Ahmadi
-# Date(in): Oct 30, 2017
-# Date2: Nov 6, 2017
-# This version would be more structured
-############################################################
-# importing numpy and linear algebra modules
 import numpy as np
 import numpy.linalg as lg
 
 ########################################
 ###            Functions             ###
 ########################################
-def H_k(k_vec, p=1, q=3):
+def H_k(k_vec, p=1, q=2):
     kx=k_vec[0]
     ky=k_vec[1]
     # Initialize the matrix
@@ -25,18 +16,18 @@ def H_k(k_vec, p=1, q=3):
         M[i, i] =  2 * np.cos(ky +2*np.pi*(p/q) * (i+1))
     # Upper diagonal
         if i + 1 < q:
-            M[i, i + 1] = np.exp(+q*kx*1j)
+            M[i, i + 1] = np.exp(kx*1j)
     # Lower diagonal
         if i - 1 >= 0:
-            M[i, i - 1] = np.exp(-q*kx*1j)
+            M[i, i - 1] = np.exp(-kx*1j)
 
-    M[0,q-1]= np.exp(-1j*kx*q)
-    M[q-1,0]= np.exp(1j*kx*q)  
+    M[0,q-1]= np.exp(-1j*kx)
+    M[q-1,0]= np.exp(1j*kx)  
 
     if q==2:
         M[0,1]=np.exp(+kx*1j)+np.exp(-kx*1j) 
         M[1,0]=np.exp(+kx*1j)+np.exp(-kx*1j)  
-    #M=M+M.conj().T      
+    M=M+M.conj().T      
     return M
 
 def build_U(vec1,vec2):
@@ -129,7 +120,7 @@ def latF(k_vec, Dk, dim):
 
 x_res = 50
 y_res = 50
-q = 3
+q = 2
 Nd = q                          # dimension of the Hamiltonian
 
 Dx = (2.*np.pi/3.)/x_res
@@ -159,60 +150,3 @@ for ix in range(x_res):
 
 chernN = sumN.imag/(2.*np.pi)
 print("Chern number associated with each band: ", chernN)
-
-##################################################
-###             Main program                   ###
-##################################################
-
-import matplotlib.pyplot as pl
-from mpl_toolkits.mplot3d import Axes3D
-from matplotlib import cm
-
-fig = pl.figure()
-ax = fig.add_subplot(111,projection='3d')
-
-kx = np.linspace(0,2.*np.pi/3., x_res)
-ky = np.linspace(0,2.*np.pi, y_res)
-
-kx, ky = np.meshgrid(ky,kx)
-
-surf = ax.plot_wireframe(ky, kx, LF_arr[1,:,:], rstride=1, cstride=1, color='0.4')
-# ax.set_xlim(0,2.*np.pi/3.)
-
-# Set viewpoint.
-ax.azim = -60
-ax.elev = 30
-
-# Label axes.
-ax.set_xlabel(r'$k_x$', fontsize=18)
-ax.set_xticks([0.0, np.pi/3, 2*np.pi/3])
-ax.set_xticklabels([r'$0$', r'$\pi/3$', r'$2\pi/3$'], fontsize=16)
-ax.set_xlim(0,2*np.pi/3)
-
-ax.set_ylabel(r'$k_y$', fontsize=18)
-ax.yaxis._axinfo['label']['space_factor'] = 2.5
-ax.set_yticks([0.0, np.pi, 2*np.pi])
-ax.set_yticklabels([r'$0$', r'$\pi$', r'$2\pi$'], fontsize=16)
-ax.set_ylim(0,2*np.pi)
-
-
-ax.set_zlabel(r'$i\tilde{F}_{12}$', fontsize=18)
-ax.zaxis._axinfo['label']['space_factor'] = 2.5
-
-# ax.set_zticks([""])
-
-# ax.set_zticklabels([""])
-
-
-# surf = ax.plot_surface(ky, kx, LF_arr[1,:,:], rstride=1, cstride=1, color='g', norm=0.1, shade=True,
-#                           facecolor='b', linewidth=0, antialiased=False) #cmap=cm.jet
-
-# To rescale the plot
-ax.get_proj = lambda: np.dot(Axes3D.get_proj(ax), np.diag([0.5, 1.5, 1, 1]))
-
-# ax.auto_scale_xyz([0, 500], [0, 500], [0, 0.15])
-# ax.pbaspect = [.6, 2.6, 0.25]
-# fig.colorbar(surf, shrink=1., aspect=5)
-
-pl.show()
-# fig.savefig("chr3.pdf", bbox_inches='tight')
